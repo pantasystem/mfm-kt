@@ -16,6 +16,34 @@ import dev.misskey.mfm.parser.core.*
 internal object FullParser {
 
     // -----------------------------------------------------------------------
+    // Precompiled regexes (コンパイルコストを初回のみに抑える)
+    // -----------------------------------------------------------------------
+
+    private val RE_QUOTE_LINE     = Regex("> ?(.*)")
+    private val RE_CODE_BLOCK     = Regex("```([^\\n]*)\\n([\\s\\S]+?)\\n```(?:\\n|\$)")
+    private val RE_MATH_BLOCK     = Regex("\\\\\\[([\\s\\S]+?)\\\\\\](?:\\n|\$)")
+    private val RE_CENTER         = Regex("<center>([\\s\\S]+?)</center>(?:\\n|\$)")
+    private val RE_SEARCH         = Regex("(.+)\\s\\[(検索|[Ss]earch)\\](?:\\n|\$)")
+    private val RE_EMOJI_CODE     = Regex(":([a-z0-9_+\\-]+):")
+    private val RE_BOLD_TAG       = Regex("<b>([\\s\\S]+?)</b>")
+    private val RE_BOLD_UNDER     = Regex("__([a-zA-Z0-9\\u0020\\u3000\\t]+)__")
+    private val RE_ITALIC_ASTA    = Regex("\\*([^\\s*]+)\\*")
+    private val RE_ITALIC_UNDER   = Regex("_([^\\s_]+)_")
+    private val RE_ITALIC_TAG     = Regex("<i>([\\s\\S]+?)</i>")
+    private val RE_STRIKE_WAVE    = Regex("~~([\\s\\S]+?)~~")
+    private val RE_STRIKE_TAG     = Regex("<s>([\\s\\S]+?)</s>")
+    private val RE_SMALL_TAG      = Regex("<small>([\\s\\S]+?)</small>")
+    private val RE_PLAIN_TAG      = Regex("<plain>([\\s\\S]+?)</plain>")
+    private val RE_INLINE_CODE    = Regex("`([^`\u00b4\\n]+)`")
+    private val RE_MATH_INLINE    = Regex("\\\\\\(([^\\)\\n]+)\\\\\\)")
+    private val RE_MENTION        = Regex("@([a-zA-Z0-9_.-]+)(?:@([a-zA-Z0-9_.\\-]+\\.[a-zA-Z0-9]+))?")
+    private val RE_HASHTAG        = Regex("#([^\\s\\u3000\\t.,!?'\"#:/\\[\\]【】()「」（）<>]+)")
+    private val RE_URL_ALT        = Regex("<(https?://[^>\\s]+)>")
+    private val RE_URL            = Regex("https?://[\\w/:%#@\$&?!()\\[\\]~.=+\\-]+")
+    private val RE_FN_NAME        = Regex("\\\$\\[([a-z0-9_]+)")
+    private val RE_FN_ARG         = Regex("([a-z0-9_]+)(?:=([a-z0-9_.]+))?")
+
+    // -----------------------------------------------------------------------
     // Entry point
     // -----------------------------------------------------------------------
 
@@ -79,7 +107,7 @@ internal object FullParser {
     private val quoteParser: Parser<Quote> = Parser { input, index, state ->
         if (index > 0 && input[index - 1] != '\n') return@Parser Failure
         if (index >= input.length || input[index] != '>') return@Parser Failure
-        val lineRegex = Regex("> ?(.*)")
+        val lineRegex = RE_QUOTE_LINE
         val lines = mutableListOf<String>()
         var cur = index
         while (cur < input.length) {
@@ -103,8 +131,7 @@ internal object FullParser {
     /** ` ```lang\ncode\n``` ` */
     private val codeBlockParser: Parser<CodeBlock> = Parser { input, index, _ ->
         if (index > 0 && input[index - 1] != '\n') return@Parser Failure
-        val regex = Regex("```([^\\n]*)\\n([\\s\\S]+?)\\n```(?:\\n|\$)")
-        val match = regex.find(input, index) ?: return@Parser Failure
+        val match = RE_CODE_BLOCK.find(input, index) ?: return@Parser Failure
         if (match.range.first != index) return@Parser Failure
         val lang = match.groupValues[1].trim().ifEmpty { null }
         Success(CodeBlock(match.groupValues[2], lang), match.range.last + 1)
@@ -113,8 +140,7 @@ internal object FullParser {
     /** `\[formula\]` */
     private val mathBlockParser: Parser<MathBlock> = Parser { input, index, _ ->
         if (index > 0 && input[index - 1] != '\n') return@Parser Failure
-        val regex = Regex("\\\\\\[([\\s\\S]+?)\\\\\\](?:\\n|\$)")
-        val match = regex.find(input, index) ?: return@Parser Failure
+        val match = RE_MATH_BLOCK.find(input, index) ?: return@Parser Failure
         if (match.range.first != index) return@Parser Failure
         Success(MathBlock(match.groupValues[1].trim()), match.range.last + 1)
     }
@@ -122,8 +148,7 @@ internal object FullParser {
     /** `<center>...</center>` */
     private val centerParser: Parser<Center> = Parser { input, index, state ->
         if (index > 0 && input[index - 1] != '\n') return@Parser Failure
-        val regex = Regex("<center>([\\s\\S]+?)</center>(?:\\n|\$)")
-        val match = regex.find(input, index) ?: return@Parser Failure
+        val match = RE_CENTER.find(input, index) ?: return@Parser Failure
         if (match.range.first != index) return@Parser Failure
         val children = nestInline(match.groupValues[1], state)
         Success(Center(children), match.range.last + 1)
@@ -132,8 +157,7 @@ internal object FullParser {
     /** `query [検索]` */
     private val searchParser: Parser<Search> = Parser { input, index, _ ->
         if (index > 0 && input[index - 1] != '\n') return@Parser Failure
-        val regex = Regex("(.+)\\s\\[(検索|[Ss]earch)\\](?:\\n|\$)")
-        val match = regex.find(input, index) ?: return@Parser Failure
+        val match = RE_SEARCH.find(input, index) ?: return@Parser Failure
         if (match.range.first != index) return@Parser Failure
         val query = match.groupValues[1]
         val content = match.value.trimEnd('\n', '\r')
@@ -152,8 +176,7 @@ internal object FullParser {
     /** `:name:` */
     private val emojiCodeParser: Parser<EmojiCode> = Parser { input, index, _ ->
         if (index > 0 && input[index - 1].isLetterOrDigit()) return@Parser Failure
-        val regex = Regex(":([a-z0-9_+\\-]+):")
-        val match = regex.find(input, index) ?: return@Parser Failure
+        val match = RE_EMOJI_CODE.find(input, index) ?: return@Parser Failure
         if (match.range.first != index) return@Parser Failure
         val after = index + match.value.length
         if (after < input.length && input[after].isLetterOrDigit()) return@Parser Failure
@@ -172,16 +195,14 @@ internal object FullParser {
 
     /** `<b>...</b>` */
     private val boldTagParser: Parser<Bold> = Parser { input, index, state ->
-        val regex = Regex("<b>([\\s\\S]+?)</b>")
-        val match = regex.find(input, index) ?: return@Parser Failure
+        val match = RE_BOLD_TAG.find(input, index) ?: return@Parser Failure
         if (match.range.first != index) return@Parser Failure
         Success(Bold(nestInline(match.groupValues[1], state)), match.range.last + 1)
     }
 
     /** `__text__` (英数字・空白のみ) */
     private val boldUnderParser: Parser<Bold> = Parser { input, index, _ ->
-        val regex = Regex("__([a-zA-Z0-9\\u0020\\u3000\\t]+)__")
-        val match = regex.find(input, index) ?: return@Parser Failure
+        val match = RE_BOLD_UNDER.find(input, index) ?: return@Parser Failure
         if (match.range.first != index) return@Parser Failure
         Success(Bold(listOf(MfmText(match.groupValues[1]))), match.range.last + 1)
     }
@@ -189,8 +210,7 @@ internal object FullParser {
     /** `*text*` */
     private val italicAstaParser: Parser<Italic> = Parser { input, index, state ->
         if (index > 0 && input[index - 1].isLetterOrDigit()) return@Parser Failure
-        val regex = Regex("\\*([^\\s*]+)\\*")
-        val match = regex.find(input, index) ?: return@Parser Failure
+        val match = RE_ITALIC_ASTA.find(input, index) ?: return@Parser Failure
         if (match.range.first != index) return@Parser Failure
         Success(Italic(nestInline(match.groupValues[1], state)), match.range.last + 1)
     }
@@ -198,64 +218,56 @@ internal object FullParser {
     /** `_text_` */
     private val italicUnderParser: Parser<Italic> = Parser { input, index, _ ->
         if (index > 0 && input[index - 1].isLetterOrDigit()) return@Parser Failure
-        val regex = Regex("_([^\\s_]+)_")
-        val match = regex.find(input, index) ?: return@Parser Failure
+        val match = RE_ITALIC_UNDER.find(input, index) ?: return@Parser Failure
         if (match.range.first != index) return@Parser Failure
         Success(Italic(listOf(MfmText(match.groupValues[1]))), match.range.last + 1)
     }
 
     /** `<i>...</i>` */
     private val italicTagParser: Parser<Italic> = Parser { input, index, state ->
-        val regex = Regex("<i>([\\s\\S]+?)</i>")
-        val match = regex.find(input, index) ?: return@Parser Failure
+        val match = RE_ITALIC_TAG.find(input, index) ?: return@Parser Failure
         if (match.range.first != index) return@Parser Failure
         Success(Italic(nestInline(match.groupValues[1], state)), match.range.last + 1)
     }
 
     /** `~~...~~` */
     private val strikeWaveParser: Parser<Strike> = Parser { input, index, state ->
-        val regex = Regex("~~([\\s\\S]+?)~~")
-        val match = regex.find(input, index) ?: return@Parser Failure
+        val match = RE_STRIKE_WAVE.find(input, index) ?: return@Parser Failure
         if (match.range.first != index) return@Parser Failure
         Success(Strike(nestInline(match.groupValues[1], state)), match.range.last + 1)
     }
 
     /** `<s>...</s>` */
     private val strikeTagParser: Parser<Strike> = Parser { input, index, state ->
-        val regex = Regex("<s>([\\s\\S]+?)</s>")
-        val match = regex.find(input, index) ?: return@Parser Failure
+        val match = RE_STRIKE_TAG.find(input, index) ?: return@Parser Failure
         if (match.range.first != index) return@Parser Failure
         Success(Strike(nestInline(match.groupValues[1], state)), match.range.last + 1)
     }
 
     /** `<small>...</small>` */
     private val smallTagParser: Parser<Small> = Parser { input, index, state ->
-        val regex = Regex("<small>([\\s\\S]+?)</small>")
-        val match = regex.find(input, index) ?: return@Parser Failure
+        val match = RE_SMALL_TAG.find(input, index) ?: return@Parser Failure
         if (match.range.first != index) return@Parser Failure
         Success(Small(nestInline(match.groupValues[1], state)), match.range.last + 1)
     }
 
     /** `<plain>...</plain>` */
     private val plainTagParser: Parser<Plain> = Parser { input, index, _ ->
-        val regex = Regex("<plain>([\\s\\S]+?)</plain>")
-        val match = regex.find(input, index) ?: return@Parser Failure
+        val match = RE_PLAIN_TAG.find(input, index) ?: return@Parser Failure
         if (match.range.first != index) return@Parser Failure
         Success(Plain(listOf(MfmText(match.groupValues[1]))), match.range.last + 1)
     }
 
     /** `` `code` `` */
     private val inlineCodeParser: Parser<InlineCode> = Parser { input, index, _ ->
-        val regex = Regex("`([^`\u00b4\\n]+)`")
-        val match = regex.find(input, index) ?: return@Parser Failure
+        val match = RE_INLINE_CODE.find(input, index) ?: return@Parser Failure
         if (match.range.first != index) return@Parser Failure
         Success(InlineCode(match.groupValues[1]), match.range.last + 1)
     }
 
     /** `\(formula\)` */
     private val mathInlineParser: Parser<MathInline> = Parser { input, index, _ ->
-        val regex = Regex("\\\\\\(([^\\)\\n]+)\\\\\\)")
-        val match = regex.find(input, index) ?: return@Parser Failure
+        val match = RE_MATH_INLINE.find(input, index) ?: return@Parser Failure
         if (match.range.first != index) return@Parser Failure
         Success(MathInline(match.groupValues[1]), match.range.last + 1)
     }
@@ -265,8 +277,7 @@ internal object FullParser {
         if (state.linkLabel) return@Parser Failure
         if (index > 0 && input[index - 1].isLetterOrDigit()) return@Parser Failure
         if (index >= input.length || input[index] != '@') return@Parser Failure
-        val regex = Regex("@([a-zA-Z0-9_.-]+)(?:@([a-zA-Z0-9_.\\-]+\\.[a-zA-Z0-9]+))?")
-        val match = regex.find(input, index) ?: return@Parser Failure
+        val match = RE_MENTION.find(input, index) ?: return@Parser Failure
         if (match.range.first != index) return@Parser Failure
         val username = match.groupValues[1].trimEnd('.', '-')
         if (username.isEmpty()) return@Parser Failure
@@ -284,8 +295,7 @@ internal object FullParser {
             if (prev != ' ' && prev != '\u3000' && prev != '\t' && prev != '\n' && prev != '\r') return@Parser Failure
         }
         if (index >= input.length || input[index] != '#') return@Parser Failure
-        val regex = Regex("#([^\\s\\u3000\\t.,!?'\"#:/\\[\\]【】()「」（）<>]+)")
-        val match = regex.find(input, index) ?: return@Parser Failure
+        val match = RE_HASHTAG.find(input, index) ?: return@Parser Failure
         if (match.range.first != index) return@Parser Failure
         val tag = match.groupValues[1]
         if (tag.isEmpty() || tag.all { it.isDigit() }) return@Parser Failure
@@ -297,15 +307,13 @@ internal object FullParser {
         if (state.linkLabel) return@Parser Failure
         // angle-bracket URL
         if (index < input.length && input[index] == '<') {
-            val altRegex = Regex("<(https?://[^>\\s]+)>")
-            val altMatch = altRegex.find(input, index)
+            val altMatch = RE_URL_ALT.find(input, index)
             if (altMatch != null && altMatch.range.first == index) {
                 return@Parser Success(Url(altMatch.groupValues[1], brackets = true), altMatch.range.last + 1)
             }
         }
         // bare URL
-        val regex = Regex("https?://[\\w/:%#@\$&?!()\\[\\]~.=+\\-]+")
-        val match = regex.find(input, index) ?: return@Parser Failure
+        val match = RE_URL.find(input, index) ?: return@Parser Failure
         if (match.range.first != index) return@Parser Failure
         val url = match.value.trimEnd('.', ',')
         Success(Url(url, brackets = false), index + url.length)
@@ -338,8 +346,7 @@ internal object FullParser {
     private val fnParser: Parser<Fn> = Parser { input, index, state ->
         if (!input.startsWith("\$[", index)) return@Parser Failure
         // name
-        val nameRegex = Regex("\\\$\\[([a-z0-9_]+)")
-        val nameMatch = nameRegex.find(input, index) ?: return@Parser Failure
+        val nameMatch = RE_FN_NAME.find(input, index) ?: return@Parser Failure
         if (nameMatch.range.first != index) return@Parser Failure
         val name = nameMatch.groupValues[1]
         var cur = nameMatch.range.last + 1
@@ -348,9 +355,8 @@ internal object FullParser {
         val args = mutableMapOf<String, String?>()
         if (cur < input.length && input[cur] == '.') {
             cur++
-            val argRegex = Regex("([a-z0-9_]+)(?:=([a-z0-9_.]+))?")
             while (cur < input.length) {
-                val argMatch = argRegex.find(input, cur) ?: break
+                val argMatch = RE_FN_ARG.find(input, cur) ?: break
                 if (argMatch.range.first != cur) break
                 args[argMatch.groupValues[1]] = argMatch.groupValues[2].ifEmpty { null }
                 cur = argMatch.range.last + 1
