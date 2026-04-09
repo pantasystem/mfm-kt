@@ -105,6 +105,54 @@ class ParserTest {
         assertEquals(listOf(EmojiCode("foo")), nodes)
     }
 
+    // ---- カスタム絵文字の境界条件 (mfm.js仕様準拠) ----
+
+    @Test fun `emoji code in Japanese sentence`() {
+        // 日本語に挟まれた絵文字は認識される
+        val nodes = Mfm.parse(":kawaii:に:nuigurumi:を合わせて:yosiyosi:する")
+        val emojis = nodes.filterIsInstance<EmojiCode>()
+        assertEquals(3, emojis.size)
+        assertEquals("kawaii",    emojis[0].name)
+        assertEquals("nuigurumi", emojis[1].name)
+        assertEquals("yosiyosi",  emojis[2].name)
+    }
+
+    @Test fun `emoji code text nodes preserved in Japanese sentence`() {
+        val nodes = Mfm.parse(":kawaii:に:nuigurumi:を合わせて:yosiyosi:する")
+        val texts = nodes.filterIsInstance<MfmText>().map { it.text }
+        assertTrue("に" in texts)
+        assertTrue("を合わせて" in texts)
+        assertTrue("する" in texts)
+    }
+
+    @Test fun `emoji code not parsed when preceded by ascii alphanumeric`() {
+        // ASCII英数字が直前にある場合はテキストとして扱われる (mfm.js: foo:bar:baz → TEXT)
+        val nodes = Mfm.parse("foo:bar:baz")
+        assertEquals(0, nodes.filterIsInstance<EmojiCode>().size)
+    }
+
+    @Test fun `emoji code not parsed inside digits`() {
+        // 数字に挟まれている場合もテキスト (mfm.js: 12:34:56 → TEXT)
+        val nodes = Mfm.parse("12:34:56")
+        assertEquals(0, nodes.filterIsInstance<EmojiCode>().size)
+    }
+
+    @Test fun `emoji code with hyphen and plus`() {
+        val nodes = Mfm.parse(":flag-jp: :blobcat+1:")
+        val emojis = nodes.filterIsInstance<EmojiCode>()
+        assertEquals(2, emojis.size)
+        assertEquals("flag-jp",   emojis[0].name)
+        assertEquals("blobcat+1", emojis[1].name)
+    }
+
+    @Test fun `emoji code consecutive`() {
+        val nodes = Mfm.parse(":foo::bar:")
+        val emojis = nodes.filterIsInstance<EmojiCode>()
+        assertEquals(2, emojis.size)
+        assertEquals("foo", emojis[0].name)
+        assertEquals("bar", emojis[1].name)
+    }
+
     @Test fun `url bare`() {
         val nodes = Mfm.parse("https://example.com")
         val url = nodes.filterIsInstance<Url>().firstOrNull()

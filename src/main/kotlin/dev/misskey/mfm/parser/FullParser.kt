@@ -13,6 +13,8 @@ import dev.misskey.mfm.parser.core.*
  *   "現在位置から始まるマッチ" を判定する。
  *   (`^` は MULTILINE なしだと常に文字列先頭にアンカーされるため index > 0 で使えない)
  */
+private fun Char.isAsciiLetterOrDigit() = this.code < 128 && this.isLetterOrDigit()
+
 internal object FullParser {
 
     // -----------------------------------------------------------------------
@@ -24,7 +26,7 @@ internal object FullParser {
     private val RE_MATH_BLOCK     = Regex("\\\\\\[([\\s\\S]+?)\\\\\\](?:\\n|\$)")
     private val RE_CENTER         = Regex("<center>([\\s\\S]+?)</center>(?:\\n|\$)")
     private val RE_SEARCH         = Regex("(.+)\\s\\[(検索|[Ss]earch)\\](?:\\n|\$)")
-    private val RE_EMOJI_CODE     = Regex(":([a-z0-9_+\\-]+):")
+    private val RE_EMOJI_CODE     = Regex(":([a-z0-9_+\\-]+):", RegexOption.IGNORE_CASE)
     private val RE_BOLD_TAG       = Regex("<b>([\\s\\S]+?)</b>")
     private val RE_BOLD_UNDER     = Regex("__([a-zA-Z0-9\\u0020\\u3000\\t]+)__")
     private val RE_ITALIC_ASTA    = Regex("\\*([^\\s*]+)\\*")
@@ -175,12 +177,13 @@ internal object FullParser {
 
     /** `:name:` */
     private val emojiCodeParser: Parser<EmojiCode> = Parser { input, index, _ ->
-        if (index > 0 && input[index - 1].isLetterOrDigit()) return@Parser Failure
+        // mfm.js仕様: ASCII英数字 [a-z0-9] が直前/直後にある場合は絵文字として認識しない
+        if (index > 0 && input[index - 1].isAsciiLetterOrDigit()) return@Parser Failure
         val match = RE_EMOJI_CODE.find(input, index) ?: return@Parser Failure
         if (match.range.first != index) return@Parser Failure
         val after = index + match.value.length
-        if (after < input.length && input[after].isLetterOrDigit()) return@Parser Failure
-        Success(EmojiCode(match.groupValues[1]), match.range.last + 1)
+        if (after < input.length && input[after].isAsciiLetterOrDigit()) return@Parser Failure
+        Success(EmojiCode(match.groupValues[1].lowercase()), match.range.last + 1)
     }
 
     /** `**...**` */
