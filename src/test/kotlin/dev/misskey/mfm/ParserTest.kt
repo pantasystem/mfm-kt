@@ -125,8 +125,16 @@ class ParserTest {
         assertTrue("する" in texts)
     }
 
-    @Test fun `emoji code not parsed when preceded by ascii alphanumeric`() {
-        // ASCII英数字が直前にある場合はテキストとして扱われる (mfm.js: foo:bar:baz → TEXT)
+    @Test fun `emoji code parsed even when preceded by ascii alphanumeric`() {
+        // 直前の文字は無関係。abc:kawaii: → TEXT("abc") + EmojiCode("kawaii")
+        val nodes = Mfm.parse("abc:kawaii:")
+        val emojis = nodes.filterIsInstance<EmojiCode>()
+        assertEquals(1, emojis.size)
+        assertEquals("kawaii", emojis[0].name)
+    }
+
+    @Test fun `emoji code not parsed when followed by ascii alphanumeric`() {
+        // 直後が ASCII 英数字の場合は絵文字にならない (mfm.js: foo:bar:baz → TEXT)
         val nodes = Mfm.parse("foo:bar:baz")
         assertEquals(0, nodes.filterIsInstance<EmojiCode>().size)
     }

@@ -177,13 +177,14 @@ internal object FullParser {
 
     /** `:name:` */
     private val emojiCodeParser: Parser<EmojiCode> = Parser { input, index, _ ->
-        // mfm.js仕様: ASCII英数字 [a-z0-9] が直前/直後にある場合は絵文字として認識しない
-        if (index > 0 && input[index - 1].isAsciiLetterOrDigit()) return@Parser Failure
+        // mfm.js仕様: 先頭チェックは「現在位置の文字が [a-z0-9] でないこと」
+        // → ':' は常に該当しないので実質チェック不要
+        // 末尾チェックのみ: 閉じ ':' の直後が ASCII 英数字なら絵文字として認識しない
         val match = RE_EMOJI_CODE.find(input, index) ?: return@Parser Failure
         if (match.range.first != index) return@Parser Failure
-        val after = index + match.value.length
+        val after = match.range.last + 1
         if (after < input.length && input[after].isAsciiLetterOrDigit()) return@Parser Failure
-        Success(EmojiCode(match.groupValues[1].lowercase()), match.range.last + 1)
+        Success(EmojiCode(match.groupValues[1].lowercase()), after)
     }
 
     /** `**...**` */
