@@ -36,6 +36,14 @@ class ParserTest {
         assertEquals("Misskey", node.query)
     }
 
+
+    @Test fun `search eng ver`() {
+        val nodes = Mfm.parse("Misskey Search\n")
+        val node = nodes.filterIsInstance<Search>().firstOrNull()
+        assertNotNull(node)
+        assertEquals("Misskey", node.query)
+    }
+
     // -----------------------------------------------------------------------
     // Inline nodes
     // -----------------------------------------------------------------------
