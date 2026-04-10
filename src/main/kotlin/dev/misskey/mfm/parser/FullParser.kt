@@ -43,7 +43,7 @@ internal object FullParser {
     private val RE_URL_ALT        = Regex("<(https?://[^>\\s]+)>")
     private val RE_URL            = Regex("https?://[\\w/:%#@\$&?!()\\[\\]~.=+\\-]+")
     private val RE_FN_NAME        = Regex("\\\$\\[([a-z0-9_]+)")
-    private val RE_FN_ARG         = Regex("([a-z0-9_]+)(?:=([a-z0-9_.]+))?")
+    private val RE_FN_ARG         = Regex("([a-z0-9_]+)(?:=(-?[a-zA-Z0-9_.]+))?")
 
     // -----------------------------------------------------------------------
     // Entry point

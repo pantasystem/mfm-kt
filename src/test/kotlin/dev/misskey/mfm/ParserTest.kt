@@ -206,6 +206,31 @@ class ParserTest {
         assertEquals("2s", fn.args["speed"])
     }
 
+    @Test fun `fn with uppercase hex color arg`() {
+        // $[fg.color=3CB371 【お知らせ】] — 大文字を含むカラーコード
+        val nodes = Mfm.parse("\$[fg.color=3CB371 【お知らせ】]")
+        val fn = nodes.filterIsInstance<Fn>().firstOrNull()
+        assertNotNull(fn)
+        assertEquals("fg", fn.name)
+        assertEquals("3CB371", fn.args["color"])
+    }
+
+    @Test fun `fn fg with lowercase hex color`() {
+        val nodes = Mfm.parse("\$[fg.color=f00 赤字]")
+        val fn = nodes.filterIsInstance<Fn>().firstOrNull()
+        assertNotNull(fn)
+        assertEquals("fg", fn.name)
+        assertEquals("f00", fn.args["color"])
+    }
+
+    @Test fun `fn bg with hex color`() {
+        val nodes = Mfm.parse("\$[bg.color=ff0 黄背景]")
+        val fn = nodes.filterIsInstance<Fn>().firstOrNull()
+        assertNotNull(fn)
+        assertEquals("bg", fn.name)
+        assertEquals("ff0", fn.args["color"])
+    }
+
     @Test fun `plain tag`() {
         val nodes = Mfm.parse("<plain>**not bold**</plain>")
         val plain = nodes.filterIsInstance<Plain>().firstOrNull()
