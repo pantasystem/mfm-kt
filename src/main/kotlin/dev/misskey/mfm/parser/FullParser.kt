@@ -25,7 +25,7 @@ internal object FullParser {
     private val RE_CODE_BLOCK     = Regex("```([^\\n]*)\\n([\\s\\S]+?)\\n```(?:\\n|\$)")
     private val RE_MATH_BLOCK     = Regex("\\\\\\[([\\s\\S]+?)\\\\\\](?:\\n|\$)")
     private val RE_CENTER         = Regex("<center>([\\s\\S]+?)</center>(?:\\n|\$)")
-    private val RE_SEARCH         = Regex("(.+)\\s\\[(検索|[Ss]earch)\\](?:\\n|\$)")
+    private val RE_SEARCH         = Regex("(.+)\\s(?:\\[(検索|[Ss]earch)\\]|(検索|[Ss]earch))(?:\\n|\$)")
     private val RE_EMOJI_CODE     = Regex(":([a-z0-9_+\\-]+):", RegexOption.IGNORE_CASE)
     private val RE_BOLD_TAG       = Regex("<b>([\\s\\S]+?)</b>")
     private val RE_BOLD_UNDER     = Regex("__([a-zA-Z0-9\\u0020\\u3000\\t]+)__")
@@ -213,7 +213,7 @@ internal object FullParser {
 
     /** `*text*` */
     private val italicAstaParser: Parser<Italic> = Parser { input, index, state ->
-        if (index > 0 && input[index - 1].isLetterOrDigit()) return@Parser Failure
+        if (index > 0 && input[index - 1].isAsciiLetterOrDigit()) return@Parser Failure
         val match = RE_ITALIC_ASTA.find(input, index) ?: return@Parser Failure
         if (match.range.first != index) return@Parser Failure
         Success(Italic(nestInline(match.groupValues[1], state)), match.range.last + 1)
@@ -221,7 +221,7 @@ internal object FullParser {
 
     /** `_text_` */
     private val italicUnderParser: Parser<Italic> = Parser { input, index, _ ->
-        if (index > 0 && input[index - 1].isLetterOrDigit()) return@Parser Failure
+        if (index > 0 && input[index - 1].isAsciiLetterOrDigit()) return@Parser Failure
         val match = RE_ITALIC_UNDER.find(input, index) ?: return@Parser Failure
         if (match.range.first != index) return@Parser Failure
         Success(Italic(listOf(MfmText(match.groupValues[1]))), match.range.last + 1)
