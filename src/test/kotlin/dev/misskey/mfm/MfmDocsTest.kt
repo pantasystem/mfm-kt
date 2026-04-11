@@ -518,4 +518,66 @@ class MfmDocsTest {
         assertTrue(nodes.filterIsInstance<Hashtag>().isNotEmpty())
         assertTrue(nodes.filterIsInstance<EmojiCode>().isNotEmpty())
     }
+
+    // -----------------------------------------------------------------------
+    // 深いネスト・複合 $[fn] 構文
+    // -----------------------------------------------------------------------
+
+    /**
+     * $[position.x=2,y=2 $[tada.speed=100s $[x2 $[rotate.deg=-25 :nozarashi_usachan_pouch:]]]
+     * $[position.y=-6.7,x=-.5 $[x4 <small><small>🟦</small></small>]]]
+     * ]
+     *
+     * 検証ポイント:
+     * - カンマ区切り複数引数 (x=2,y=2)
+     * - 負の小数引数 (deg=-25, y=-6.7, x=-.5)
+     * - 深いネスト (4段)
+     * - 絵文字・small タグ混在
+     */
+    @Test fun `deeply nested fn with comma args and negative decimal args`() {
+        val input = "\$[position.x=2,y=2 \$[tada.speed=100s \$[x2 \$[rotate.deg=-25 :nozarashi_usachan_pouch:]]]\n\$[position.y=-6.7,x=-.5 \$[x4 <small><small>🟦</small></small>]]]\n]"
+        val nodes = Mfm.parse(input)
+
+        // 外側の $[position.x=2,y=2 ...]
+        val outerPosition = nodes.filterIsInstance<Fn>().firstOrNull { it.name == "position" }
+        assertNotNull(outerPosition)
+        assertEquals("2", outerPosition.args["x"])
+        assertEquals("2", outerPosition.args["y"])
+
+        // 全 Fn ノードをツリーから抽出
+        val allFns = Mfm.extract(nodes) { it as? Fn }
+
+        // $[tada.speed=100s ...]
+        val tada = allFns.firstOrNull { it.name == "tada" }
+        assertNotNull(tada)
+        assertEquals("100s", tada.args["speed"])
+
+        // $[rotate.deg=-25 ...]
+        val rotate = allFns.firstOrNull { it.name == "rotate" }
+        assertNotNull(rotate)
+        assertEquals("-25", rotate.args["deg"])
+
+        // :nozarashi_usachan_pouch:
+        val emoji = Mfm.extract(nodes) { it as? EmojiCode }.firstOrNull { it.name == "nozarashi_usachan_pouch" }
+        assertNotNull(emoji)
+
+        // $[position.y=-6.7,x=-.5 ...]  (内側の position)
+        val innerPosition = allFns.filter { it.name == "position" }.getOrNull(1)
+        assertNotNull(innerPosition)
+        assertEquals("-6.7", innerPosition.args["y"])
+        assertEquals("-.5", innerPosition.args["x"])
+
+        // $[x4 <small><small>🟦</small></small>]
+        val x4 = allFns.firstOrNull { it.name == "x4" }
+        assertNotNull(x4)
+
+        // <small><small>🟦</small></small> → Small(children=[Small(children=[UnicodeEmoji("🟦")])])
+        val outerSmall = Mfm.extract(nodes) { it as? Small }.firstOrNull()
+        assertNotNull(outerSmall)
+        val innerSmall = outerSmall.children.filterIsInstance<Small>().firstOrNull()
+        assertNotNull(innerSmall)
+        val blueSquare = innerSmall.children.filterIsInstance<UnicodeEmoji>().firstOrNull()
+        assertNotNull(blueSquare)
+        assertEquals("🟦", blueSquare.emoji)
+    }
 }

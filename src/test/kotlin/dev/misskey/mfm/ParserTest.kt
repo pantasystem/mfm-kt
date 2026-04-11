@@ -295,6 +295,13 @@ class ParserTest {
         assertEquals("abc", plain.children.firstOrNull()?.text)
     }
 
+    @Test fun `unicode emoji blue square`() {
+        val nodes = Mfm.parse("🟦")
+        val emoji = nodes.filterIsInstance<UnicodeEmoji>().firstOrNull()
+        assertNotNull(emoji)
+        assertEquals("🟦", emoji.emoji)
+    }
+
     @Test fun `parseSimple hashtag treated as text`() {
         val nodes = Mfm.parseSimple("#tag")
         // シンプルパーサーはハッシュタグを解析しない

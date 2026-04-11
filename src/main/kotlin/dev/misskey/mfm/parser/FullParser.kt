@@ -34,7 +34,7 @@ internal object FullParser {
     private val RE_ITALIC_TAG     = Regex("<i>([\\s\\S]+?)</i>")
     private val RE_STRIKE_WAVE    = Regex("~~([\\s\\S]+?)~~")
     private val RE_STRIKE_TAG     = Regex("<s>([\\s\\S]+?)</s>")
-    private val RE_SMALL_TAG      = Regex("<small>([\\s\\S]+?)</small>")
+    // RE_SMALL_TAG は削除 — smallTagParser はネスト対応のため depth カウント方式に変更
     private val RE_PLAIN_TAG      = Regex("<plain>([\\s\\S]+?)</plain>")
     private val RE_INLINE_CODE    = Regex("`([^`\u00b4\\n]+)`")
     private val RE_MATH_INLINE    = Regex("\\\\\\(([^\\)\\n]+)\\\\\\)")
@@ -248,11 +248,21 @@ internal object FullParser {
         Success(Strike(nestInline(match.groupValues[1], state)), match.range.last + 1)
     }
 
-    /** `<small>...</small>` */
+    /** `<small>...</small>` — ネスト対応のため depth カウント方式 */
     private val smallTagParser: Parser<Small> = Parser { input, index, state ->
-        val match = RE_SMALL_TAG.find(input, index) ?: return@Parser Failure
-        if (match.range.first != index) return@Parser Failure
-        Success(Small(nestInline(match.groupValues[1], state)), match.range.last + 1)
+        if (!input.startsWith("<small>", index)) return@Parser Failure
+        var cur = index + 7
+        var depth = 1
+        while (cur < input.length && depth > 0) {
+            when {
+                input.startsWith("<small>", cur) -> { depth++; cur += 7 }
+                input.startsWith("</small>", cur) -> { depth--; if (depth > 0) cur += 8 }
+                else -> cur++
+            }
+        }
+        if (depth != 0) return@Parser Failure
+        val content = input.substring(index + 7, cur)
+        Success(Small(nestInline(content, state)), cur + 8)
     }
 
     /** `<plain>...</plain>` */
